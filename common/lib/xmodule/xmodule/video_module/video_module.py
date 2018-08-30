@@ -25,7 +25,7 @@ from lxml import etree
 from opaque_keys.edx.locator import AssetLocator
 from openedx.core.djangoapps.video_config.models import HLSPlaybackEnabledFlag
 from openedx.core.djangoapps.video_pipeline.config.waffle import waffle_flags, DEPRECATE_YOUTUBE
-from openedx.core.lib.cache_utils import memoize_in_request_cache
+from openedx.core.lib.cache_utils import request_cached
 from openedx.core.lib.license import LicenseMixin
 from xblock.completable import XBlockCompletionMode
 from xblock.core import XBlock
@@ -414,7 +414,7 @@ class VideoModule(VideoFields, VideoTranscriptsMixin, VideoStudentViewHandlers, 
         return self.system.render_template('video.html', context)
 
 
-@XBlock.wants("request_cache", "settings", "completion")
+@XBlock.wants("settings", "completion")
 class VideoDescriptor(VideoFields, VideoTranscriptsMixin, VideoStudioViewHandlers,
                       TabsEditingDescriptor, EmptyDataRawDescriptor, LicenseMixin):
     """
@@ -1046,15 +1046,9 @@ class VideoDescriptor(VideoFields, VideoTranscriptsMixin, VideoStudioViewHandler
 
         return xblock_body
 
-    @property
-    def request_cache(self):
-        """
-        Returns the request_cache from the runtime.
-        """
-        return self.runtime.service(self, "request_cache")
-
-    @memoize_in_request_cache('request_cache')
-    def get_cached_val_data_for_course(self, video_profile_names, course_id):
+    @classmethod
+    @request_cached
+    def get_cached_val_data_for_course(cls, video_profile_names, course_id):
         """
         Returns the VAL data for the requested video profiles for the given course.
         """
