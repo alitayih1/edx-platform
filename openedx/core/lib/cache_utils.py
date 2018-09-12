@@ -29,17 +29,18 @@ def request_cached(namespace=None, arg_map_function=None, request_cache_getter=N
 
     Arguments:
         namespace (string): An optional namespace to use for the cache. By default, we use the default request cache,
-            not a namespaced request cache. Since the code automatically creates a unique cache key with the module and 
+            not a namespaced request cache. Since the code automatically creates a unique cache key with the module and
             function's name, storing the cached value in the default cache, you won't usually need to specify a
             namespace value.
             But you can specify a namespace value here if you need to use your own namespaced cache - for example,
             if you want to clear out your own cache by calling RequestCache(namespace=NAMESPACE).clear().
+            NOTE: This argument is ignored if you supply a ``request_cache_getter``.
         arg_map_function (function: arg->string): Function to use for mapping the wrapped function's arguments to
             strings to use in the cache key. If not provided, defaults to force_text, which converts the given
             argument to a string.
         request_cache_getter (function: args, kwargs->RequestCache): Function that returns the RequestCache to use.
-            If not provided, defaults to edx_django_utils.cache.RequestCache.  If None, the function's return values
-            are not cached.
+            If not provided, defaults to edx_django_utils.cache.RequestCache.  If ``request_cache_getter`` returns None,
+            the function's return values are not cached.
 
     Returns:
         func: a wrapper function which will call the wrapped function, passing in the same args/kwargs,
@@ -51,7 +52,7 @@ def request_cached(namespace=None, arg_map_function=None, request_cache_getter=N
         Arguments:
             f (func): the function to wrap
         """
-        # @functools.wraps(f)
+        @functools.wraps(f)
         def _decorator(*args, **kwargs):
             """
             Arguments:
@@ -98,21 +99,24 @@ def _func_call_cache_key(func, arg_map_function, *args, **kwargs):
 
 def _sorted_kwargs_list(kwargs):
     """
-    Returns a unique and deterministic serialized string from the given kwargs.
+    Returns a unique and deterministic ordered list from the given kwargs.
     """
     sorted_kwargs = sorted(kwargs.iteritems())
     sorted_kwargs_list = list(itertools.chain(*sorted_kwargs))
     return sorted_kwargs_list
 
 
-class memoized(object):  # pylint: disable=invalid-name
+class process_cached(object):  # pylint: disable=invalid-name
     """
-    Decorator. Caches a function's return value each time it is called.
-    If called later with the same arguments, the cached value is returned
+    Decorator to cache the result of a function for the life of a process.
+
+    If the return value of the function for the provided arguments has not
+    yet been cached, the function will be calculated and cached. If called
+    later with the same arguments, the cached value is returned
     (not reevaluated).
     https://wiki.python.org/moin/PythonDecoratorLibrary#Memoize
 
-    WARNING: Only use this memoized decorator for caching data that
+    WARNING: Only use this process_cached decorator for caching data that
     is constant throughout the lifetime of a gunicorn worker process,
     is costly to compute, and is required often.  Otherwise, it can lead to
     unwanted memory leakage.

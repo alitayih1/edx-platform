@@ -2080,7 +2080,7 @@ class CourseEnrollment(models.Model):
     @classmethod
     def _get_mode_active_request_cache(cls):
         """
-        Returns the request-specific cache for CourseEnrollment
+        Returns the request-specific cache for CourseEnrollment as dict.
         """
         return RequestCache(cls.MODE_CACHE_NAMESPACE).data
 
