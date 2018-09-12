@@ -16,12 +16,13 @@ class TestRequestCachedDecorator(TestCase):
     """
     Test the request_cached decorator.
     """
+    def setUp(self):
+        RequestCache.clear_all_namespaces()
+
     def test_request_cached_miss_and_then_hit(self):
         """
         Ensure that after a cache miss, we fill the cache and can hit it.
         """
-        RequestCache.clear_all_namespaces()
-
         to_be_wrapped = Mock()
         to_be_wrapped.return_value = 42
         self.assertEqual(to_be_wrapped.call_count, 0)
@@ -43,8 +44,6 @@ class TestRequestCachedDecorator(TestCase):
         """
         Ensure that after caching a result, we always send it back, even if the underlying result changes.
         """
-        RequestCache.clear_all_namespaces()
-
         to_be_wrapped = Mock()
         to_be_wrapped.side_effect = [1, 2, 3]
         self.assertEqual(to_be_wrapped.call_count, 0)
@@ -79,8 +78,6 @@ class TestRequestCachedDecorator(TestCase):
         Ensure that calling a decorated function with different positional arguments
         will not use a cached value invoked by a previous call with different arguments.
         """
-        RequestCache.clear_all_namespaces()
-
         to_be_wrapped = Mock()
         to_be_wrapped.side_effect = [1, 2, 3, 4, 5, 6]
         self.assertEqual(to_be_wrapped.call_count, 0)
@@ -120,8 +117,6 @@ class TestRequestCachedDecorator(TestCase):
         Ensure that calling a decorated function with different keyword arguments
         will not use a cached value invoked by a previous call with different arguments.
         """
-        RequestCache.clear_all_namespaces()
-
         to_be_wrapped = Mock()
         to_be_wrapped.side_effect = [1, 2, 3, 4, 5, 6]
         self.assertEqual(to_be_wrapped.call_count, 0)
@@ -161,12 +156,20 @@ class TestRequestCachedDecorator(TestCase):
         self.assertEqual(result, 4)
         self.assertEqual(to_be_wrapped.call_count, 4)
 
+        # Since we're adding bar, this will be a miss.
+        result = wrapped(2, foo=1, bar=2)
+        self.assertEqual(result, 5)
+        self.assertEqual(to_be_wrapped.call_count, 5)
+
+        # Should be a hit, even when kwargs are in a different order
+        result = wrapped(2, bar=2, foo=1)
+        self.assertEqual(result, 5)
+        self.assertEqual(to_be_wrapped.call_count, 5)
+
     def test_request_cached_mixed_unicode_str_args(self):
         """
         Ensure that request_cached can work with mixed str and Unicode parameters.
         """
-        RequestCache.clear_all_namespaces()
-
         def dummy_function(arg1, arg2):
             """
             A dummy function that expects an str and unicode arguments.
@@ -189,8 +192,6 @@ class TestRequestCachedDecorator(TestCase):
         properly caches the result and doesn't recall the underlying
         function.
         """
-        RequestCache.clear_all_namespaces()
-
         to_be_wrapped = Mock()
         to_be_wrapped.side_effect = [None, None, None, 1, 1]
         self.assertEqual(to_be_wrapped.call_count, 0)
@@ -224,3 +225,73 @@ class TestRequestCachedDecorator(TestCase):
         result = wrapped(2)
         self.assertEqual(result, None)
         self.assertEqual(to_be_wrapped.call_count, 3)
+
+    def test_request_cached_with_request_cache_getter(self):
+        """
+        Ensure that calling a decorated function uses
+        request_cache_getter if supplied.
+        """
+        to_be_wrapped = Mock()
+        to_be_wrapped.side_effect = [1, 2, 3]
+        self.assertEqual(to_be_wrapped.call_count, 0)
+
+        def mock_wrapper(*args, **kwargs):
+            """Simple wrapper to let us decorate our mock."""
+            return to_be_wrapped(*args, **kwargs)
+
+        request_cache_getter = lambda args, kwargs: RequestCache('test')
+        wrapped = request_cached(request_cache_getter=request_cache_getter)(mock_wrapper)
+
+        # This will be a miss, and make an underlying call.
+        result = wrapped(1)
+        self.assertEqual(result, 1)
+        self.assertEqual(to_be_wrapped.call_count, 1)
+
+        # This will be a miss, and make an underlying call.
+        result = wrapped(2)
+        self.assertEqual(result, 2)
+        self.assertEqual(to_be_wrapped.call_count, 2)
+
+        # These will be a hits, and not make an underlying call.
+        result = wrapped(1)
+        self.assertEqual(result, 1)
+        self.assertEqual(to_be_wrapped.call_count, 2)
+
+        # Ensure the appropriate request cache was used
+        self.assertFalse(RequestCache().data)
+        self.assertTrue(RequestCache('test').data)
+
+    def test_request_cached_with_arg_map_function(self):
+        """
+        Ensure that calling a decorated function uses
+        arg_map_function to determined the cache key.
+        """
+        to_be_wrapped = Mock()
+        to_be_wrapped.side_effect = [1, 2, 3]
+        self.assertEqual(to_be_wrapped.call_count, 0)
+
+        def mock_wrapper(*args, **kwargs):
+            """Simple wrapper to let us decorate our mock."""
+            return to_be_wrapped(*args, **kwargs)
+
+        arg_map_function = lambda arg: unicode(arg == 1)
+        wrapped = request_cached(arg_map_function=arg_map_function)(mock_wrapper)
+
+        # This will be a miss, and make an underlying call.
+        result = wrapped(1)
+        self.assertEqual(result, 1)
+        self.assertEqual(to_be_wrapped.call_count, 1)
+
+        # This will be a miss, and make an underlying call.
+        result = wrapped(2)
+        self.assertEqual(result, 2)
+        self.assertEqual(to_be_wrapped.call_count, 2)
+
+        # These will be a hits, and not make an underlying call.
+        result = wrapped(1)
+        self.assertEqual(result, 1)
+        self.assertEqual(to_be_wrapped.call_count, 2)
+
+        result = wrapped(3)
+        self.assertEqual(result, 2)
+        self.assertEqual(to_be_wrapped.call_count, 2)
